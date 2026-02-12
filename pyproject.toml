@@ -1,0 +1,9 @@
+[project]
+name = "deltaneutral-monitor"
+version = "0.1.0"
+description = "Monitor delta-neutral trading positions"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
