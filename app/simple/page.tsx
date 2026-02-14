@@ -51,31 +51,40 @@ const MARKET_PRESETS: Record<
   {
     label: string;
     description: string;
+    detail: string;
     volatility: number;
     fundingRate: number;
   }
 > = {
   calm: {
     label: "Calm",
-    description: "Low vol (35%), funding +5%",
+    description: "Small price swings, low hedge income",
+    detail:
+      "ETH moves slowly, so IL risk is low — but you earn less from the hedge since funding rates are modest.",
     volatility: 0.35,
     fundingRate: 0.05,
   },
   normal: {
     label: "Normal",
-    description: "Med vol (60%), funding +10%",
+    description: "Moderate swings, solid hedge income",
+    detail:
+      "A typical market. Price moves enough to generate fees and the hedge earns decent funding income.",
     volatility: 0.6,
     fundingRate: 0.1,
   },
   volatile: {
     label: "Volatile",
-    description: "High vol (90%), funding +15%",
+    description: "Big price swings, high hedge income",
+    detail:
+      "Large price moves increase IL risk and rebalancing, but funding rates are high — so the hedge earns more.",
     volatility: 0.9,
     fundingRate: 0.15,
   },
   bear: {
-    label: "Bear",
-    description: "High vol (80%), funding -10%",
+    label: "Bear Market",
+    description: "Big swings, hedge costs you money",
+    detail:
+      "Prices drop and funding turns negative — meaning you pay to hold the short hedge instead of earning from it.",
     volatility: 0.8,
     fundingRate: -0.1,
   },
@@ -549,17 +558,22 @@ export default function SimpleSimulatorPage() {
           </div>
 
           {/* Row 4: Market Conditions */}
-          <OptionSelector
-            label="Market Conditions"
-            options={Object.entries(MARKET_PRESETS).map(([key, val]) => ({
-              key: key as MarketPreset,
-              label: val.label,
-              description: val.description,
-            }))}
-            value={marketPreset}
-            onChange={setMarketPreset}
-            columns="grid-cols-2 sm:grid-cols-4"
-          />
+          <div className="space-y-1.5">
+            <OptionSelector
+              label="Market Conditions"
+              options={Object.entries(MARKET_PRESETS).map(([key, val]) => ({
+                key: key as MarketPreset,
+                label: val.label,
+                description: val.description,
+              }))}
+              value={marketPreset}
+              onChange={setMarketPreset}
+              columns="grid-cols-2 sm:grid-cols-4"
+            />
+            <p className="text-[10px] text-slate-500 leading-relaxed px-0.5">
+              {MARKET_PRESETS[marketPreset].detail}
+            </p>
+          </div>
 
           {/* Row 5: Duration */}
           <OptionSelector
