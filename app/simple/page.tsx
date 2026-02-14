@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { runSimulation } from "@/lib/simulation";
 import type { SimulationParams, SimulationResult } from "@/lib/types";
 import Link from "next/link";
@@ -124,6 +124,17 @@ function NumberInput({
   step?: number;
   hint?: string;
 }) {
+  // Use a local string so the user can freely clear/type without "0" sticking
+  const [localValue, setLocalValue] = useState(String(value));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Sync from parent when value changes externally (but not while user is typing)
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setLocalValue(String(value));
+    }
+  }, [value]);
+
   return (
     <div className="space-y-1.5">
       <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
@@ -134,11 +145,24 @@ function NumberInput({
           <span className="text-slate-400 text-sm mr-1">{prefix}</span>
         )}
         <input
+          ref={inputRef}
           type="number"
-          value={value}
+          value={localValue}
           onChange={(e) => {
-            const v = Number(e.target.value);
-            if (!isNaN(v)) onChange(v);
+            const raw = e.target.value;
+            setLocalValue(raw);
+            const v = Number(raw);
+            if (raw !== "" && !isNaN(v)) onChange(v);
+          }}
+          onBlur={() => {
+            // On blur, if empty or invalid, reset to parent value
+            const v = Number(localValue);
+            if (localValue === "" || isNaN(v)) {
+              setLocalValue(String(value));
+            } else {
+              setLocalValue(String(v)); // normalize (removes leading zeros)
+              onChange(v);
+            }
           }}
           min={min}
           max={max}
@@ -308,7 +332,7 @@ function getResultExplanation(
 
 export default function SimpleSimulatorPage() {
   const [investment, setInvestment] = useState(10000);
-  const [ethPrice, setEthPrice] = useState(3000);
+  const [ethPrice, setEthPrice] = useState(2000);
   const [feeAPR, setFeeAPR] = useState(25); // percentage (user-facing)
   const [hedgeRatio, setHedgeRatio] = useState(100); // percentage (user-facing)
   const [rangePreset, setRangePreset] = useState<RangePreset>("medium");
