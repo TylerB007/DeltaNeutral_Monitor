@@ -47,6 +47,20 @@ const fmtNum = (n: number, dec = 2) => n.toFixed(dec);
 
 // ─── Reusable UI components ─────────────────────────────────────────────────
 
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <span className="relative group/tip inline-flex ml-1 cursor-help">
+      <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-slate-600 text-[9px] font-bold text-slate-500 leading-none group-hover/tip:border-blue-400 group-hover/tip:text-blue-400 transition-colors">
+        ?
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-[11px] leading-relaxed text-slate-300 font-normal normal-case tracking-normal shadow-xl opacity-0 scale-95 group-hover/tip:opacity-100 group-hover/tip:scale-100 transition-all duration-150 z-50">
+        {text}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-slate-700" />
+      </span>
+    </span>
+  );
+}
+
 function ParamSlider({
   label,
   value,
@@ -55,6 +69,7 @@ function ParamSlider({
   max,
   step,
   format,
+  tooltip,
 }: {
   label: string;
   value: number;
@@ -63,12 +78,14 @@ function ParamSlider({
   max: number;
   step: number;
   format: (v: number) => string;
+  tooltip?: string;
 }) {
   return (
     <div className="space-y-1.5">
       <div className="flex justify-between items-center">
-        <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+        <label className="text-xs font-medium text-slate-400 uppercase tracking-wide flex items-center">
           {label}
+          {tooltip && <InfoTooltip text={tooltip} />}
         </label>
         <span className="text-sm font-mono text-slate-200 bg-slate-800 px-2 py-0.5 rounded">
           {format(value)}
@@ -94,6 +111,7 @@ function NumberInput({
   prefix,
   min,
   max,
+  tooltip,
 }: {
   label: string;
   value: number;
@@ -101,11 +119,13 @@ function NumberInput({
   prefix?: string;
   min?: number;
   max?: number;
+  tooltip?: string;
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+      <label className="text-xs font-medium text-slate-400 uppercase tracking-wide flex items-center">
         {label}
+        {tooltip && <InfoTooltip text={tooltip} />}
       </label>
       <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5">
         {prefix && (
@@ -348,6 +368,7 @@ export default function SimulatorPage() {
                 onChange={(v) => updateParam("initialInvestment", v)}
                 prefix="$"
                 min={1000}
+                tooltip="Total capital deployed into the strategy. This is split between the LP position (providing liquidity) and margin for the hedge (short futures). Larger positions earn more fees in absolute dollar terms."
               />
               <NumberInput
                 label="Entry Price (ETH)"
@@ -355,6 +376,7 @@ export default function SimulatorPage() {
                 onChange={(v) => updateParam("entryPrice", v)}
                 prefix="$"
                 min={1}
+                tooltip="The current ETH price when the position is opened. Both the LP and hedge are initialized at this price. The simulation generates random price paths starting from here."
               />
               <NumberInput
                 label="LP Range — Lower"
@@ -362,6 +384,7 @@ export default function SimulatorPage() {
                 onChange={(v) => updateParam("lowerPrice", v)}
                 prefix="$"
                 min={1}
+                tooltip="Lower bound of the concentrated liquidity range. If ETH drops below this price, the position converts to 100% ETH and stops earning fees. A lower bound means more downside room before going out of range."
               />
               <NumberInput
                 label="LP Range — Upper"
@@ -369,6 +392,7 @@ export default function SimulatorPage() {
                 onChange={(v) => updateParam("upperPrice", v)}
                 prefix="$"
                 min={1}
+                tooltip="Upper bound of the concentrated liquidity range. If ETH rises above this, the position converts to 100% USDC and stops earning fees. A narrower range (closer to entry) concentrates capital for higher fee yield but increases impermanent loss risk."
               />
             </div>
 
@@ -385,6 +409,7 @@ export default function SimulatorPage() {
                 max={1.5}
                 step={0.05}
                 format={(v) => fmtPct(v, 0)}
+                tooltip="Expected price volatility of ETH over one year. Higher volatility means larger price swings, which increases impermanent loss and hedge rebalancing costs (gamma cost). Typical ETH: 50-80%. Bull runs can exceed 100%."
               />
               <ParamSlider
                 label="Fee APR"
@@ -394,6 +419,7 @@ export default function SimulatorPage() {
                 max={1.0}
                 step={0.01}
                 format={(v) => fmtPct(v, 0)}
+                tooltip="Annualized return from swap fees earned by the LP position. Depends on pool trading volume, total liquidity, and your range concentration. Fees are only earned while the price stays within your range. This is the primary income driver of the strategy."
               />
               <ParamSlider
                 label="Funding Rate (ann.)"
@@ -403,6 +429,7 @@ export default function SimulatorPage() {
                 max={0.5}
                 step={0.01}
                 format={(v) => `${v >= 0 ? "+" : ""}${fmtPct(v, 0)}`}
+                tooltip="Annualized funding rate on perpetual futures. When positive, shorts earn funding (bullish market bias — traders pay to be long). When negative, shorts pay funding (bearish pressure). Historically has a slight positive bias, making it a tailwind for this strategy."
               />
             </div>
 
@@ -419,6 +446,7 @@ export default function SimulatorPage() {
                 max={1}
                 step={0.05}
                 format={(v) => fmtPct(v, 0)}
+                tooltip="Percentage of the LP position's delta (directional exposure) that is hedged with short futures. At 100%, the position is fully delta-neutral — immune to price direction. At 0%, you have an unhedged LP with full directional exposure. Try adjusting to see the impact."
               />
               <ParamSlider
                 label="Rebalance Threshold"
@@ -428,6 +456,7 @@ export default function SimulatorPage() {
                 max={0.1}
                 step={0.005}
                 format={(v) => fmtPct(v, 1)}
+                tooltip="How much delta drift (as a fraction of initial delta) is tolerated before the hedge is rebalanced. Lower = tighter hedge with more frequent trades and higher costs. Higher = fewer trades but more directional drift between rebalances. 2% is a reasonable default."
               />
             </div>
 
@@ -444,6 +473,7 @@ export default function SimulatorPage() {
                 max={365}
                 step={1}
                 format={(v) => `${v} days`}
+                tooltip="How many days the simulation runs. Longer durations show more fee compounding and allow larger price moves, giving a clearer picture of strategy sustainability. Short durations (7-30d) are useful for near-term projections."
               />
               <ParamSlider
                 label="Monte Carlo Paths"
@@ -453,6 +483,7 @@ export default function SimulatorPage() {
                 max={500}
                 step={10}
                 format={(v) => `${v}`}
+                tooltip="Number of random price paths simulated using Geometric Brownian Motion. More paths produce smoother, more statistically reliable distributions. 200 is a good balance of accuracy and speed. Use 500 for high-confidence results."
               />
               <button
                 onClick={handleRun}
