@@ -51,36 +51,31 @@ const MARKET_PRESETS: Record<
     label: string;
     description: string;
     volatility: number;
-    feeAPR: number;
     fundingRate: number;
   }
 > = {
   calm: {
     label: "Calm",
-    description: "Low volatility, steady fees",
+    description: "Low vol (35%), funding +5%",
     volatility: 0.35,
-    feeAPR: 0.15,
     fundingRate: 0.05,
   },
   normal: {
     label: "Normal",
-    description: "Typical market conditions",
+    description: "Med vol (60%), funding +10%",
     volatility: 0.6,
-    feeAPR: 0.25,
     fundingRate: 0.1,
   },
   volatile: {
     label: "Volatile",
-    description: "High vol, higher fees",
+    description: "High vol (90%), funding +15%",
     volatility: 0.9,
-    feeAPR: 0.4,
     fundingRate: 0.15,
   },
   bear: {
     label: "Bear",
-    description: "Downturn, negative funding",
+    description: "High vol (80%), funding -10%",
     volatility: 0.8,
-    feeAPR: 0.2,
     fundingRate: -0.1,
   },
 };
@@ -95,7 +90,6 @@ const DURATION_PRESETS: Record<
 };
 
 const FIXED_PARAMS = {
-  hedgeRatio: 1.0,
   rebalanceThreshold: 0.02,
   numPaths: 200,
 };
@@ -114,13 +108,21 @@ function NumberInput({
   value,
   onChange,
   prefix,
+  suffix,
   min,
+  max,
+  step,
+  hint,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   prefix?: string;
+  suffix?: string;
   min?: number;
+  max?: number;
+  step?: number;
+  hint?: string;
 }) {
   return (
     <div className="space-y-1.5">
@@ -139,9 +141,17 @@ function NumberInput({
             if (!isNaN(v)) onChange(v);
           }}
           min={min}
+          max={max}
+          step={step}
           className="w-full bg-transparent text-slate-100 text-sm font-mono outline-none"
         />
+        {suffix && (
+          <span className="text-slate-400 text-sm ml-1">{suffix}</span>
+        )}
       </div>
+      {hint && (
+        <p className="text-[10px] text-slate-500">{hint}</p>
+      )}
     </div>
   );
 }
@@ -299,13 +309,15 @@ function getResultExplanation(
 export default function SimpleSimulatorPage() {
   const [investment, setInvestment] = useState(10000);
   const [ethPrice, setEthPrice] = useState(3000);
+  const [feeAPR, setFeeAPR] = useState(25); // percentage (user-facing)
+  const [hedgeRatio, setHedgeRatio] = useState(100); // percentage (user-facing)
   const [rangePreset, setRangePreset] = useState<RangePreset>("medium");
   const [marketPreset, setMarketPreset] = useState<MarketPreset>("normal");
   const [durationPreset, setDurationPreset] = useState<DurationPreset>("1m");
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
-  // Derive full SimulationParams from presets
+  // Derive full SimulationParams from inputs + presets
   const params = useMemo((): SimulationParams => {
     const range = RANGE_PRESETS[rangePreset];
     const market = MARKET_PRESETS[marketPreset];
@@ -316,14 +328,14 @@ export default function SimpleSimulatorPage() {
       lowerPrice: ethPrice * (1 - range.factor),
       upperPrice: ethPrice * (1 + range.factor),
       volatility: market.volatility,
-      feeAPR: market.feeAPR,
+      feeAPR: feeAPR / 100, // convert from percentage
       fundingRate: market.fundingRate,
-      hedgeRatio: FIXED_PARAMS.hedgeRatio,
+      hedgeRatio: hedgeRatio / 100, // convert from percentage
       durationDays: duration.days,
       numPaths: FIXED_PARAMS.numPaths,
       rebalanceThreshold: FIXED_PARAMS.rebalanceThreshold,
     };
-  }, [investment, ethPrice, rangePreset, marketPreset, durationPreset]);
+  }, [investment, ethPrice, feeAPR, hedgeRatio, rangePreset, marketPreset, durationPreset]);
 
   const handleRun = useCallback(() => {
     setIsRunning(true);
@@ -417,7 +429,31 @@ export default function SimpleSimulatorPage() {
             />
           </div>
 
-          {/* Row 2: Range Width */}
+          {/* Row 2: Fee APR & Hedge Size */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <NumberInput
+              label="Fee APR (Yield)"
+              value={feeAPR}
+              onChange={setFeeAPR}
+              suffix="%"
+              min={0}
+              max={500}
+              step={1}
+              hint="Annual fee yield from the LP pool. Check your pool's current APR."
+            />
+            <NumberInput
+              label="Short Hedge Size"
+              value={hedgeRatio}
+              onChange={setHedgeRatio}
+              suffix="%"
+              min={0}
+              max={200}
+              step={5}
+              hint="100% = fully hedged. 50% = half the delta is hedged. 0% = no hedge."
+            />
+          </div>
+
+          {/* Row 3: Range Width */}
           <OptionSelector
             label="Price Range Width"
             options={Object.entries(RANGE_PRESETS).map(([key, val]) => ({
@@ -430,7 +466,7 @@ export default function SimpleSimulatorPage() {
             columns="grid-cols-3"
           />
 
-          {/* Row 3: Market Conditions */}
+          {/* Row 4: Market Conditions */}
           <OptionSelector
             label="Market Conditions"
             options={Object.entries(MARKET_PRESETS).map(([key, val]) => ({
@@ -443,7 +479,7 @@ export default function SimpleSimulatorPage() {
             columns="grid-cols-2 sm:grid-cols-4"
           />
 
-          {/* Row 4: Duration */}
+          {/* Row 5: Duration */}
           <OptionSelector
             label="Time Period"
             options={Object.entries(DURATION_PRESETS).map(([key, val]) => ({
