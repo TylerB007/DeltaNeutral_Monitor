@@ -610,6 +610,135 @@ export default function SimpleSimulatorPage() {
               </p>
             </div>
 
+            {/* P&L Breakdown — all 5 layers */}
+            {(() => {
+              const s = result.stats;
+              const lpChange = s.meanIL; // IL is already LP value change vs HODL
+              const netReturn = s.medianReturn * investment;
+              const layers: {
+                label: string;
+                description: string;
+                value: number;
+                isSubtraction?: boolean;
+              }[] = [
+                {
+                  label: "LP Value Change (IL)",
+                  description: "Change in LP position value vs initial deposit",
+                  value: lpChange,
+                },
+                {
+                  label: "LP Fee Income",
+                  description: "Swap fees earned while price stayed in range",
+                  value: s.meanFees,
+                },
+                {
+                  label: "Short Hedge P&L",
+                  description: `P&L from the ${hedgeRatio}% short perp position`,
+                  value: s.meanHedgePnL,
+                },
+                {
+                  label: "Funding Income",
+                  description: "Payments received (or paid) on the perp position",
+                  value: s.meanFunding,
+                },
+                {
+                  label: "Rebalance Costs",
+                  description: `Trading costs from ~${Math.round(s.avgRebalances)} hedge adjustments`,
+                  value: -s.meanRebalanceCosts,
+                  isSubtraction: true,
+                },
+              ];
+
+              return (
+                <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-4">
+                    P&L Breakdown (Average across {result.paths.length} scenarios)
+                  </h3>
+                  <div className="space-y-2.5">
+                    {layers.map((layer) => {
+                      const pct = layer.value / investment;
+                      const isPositive = layer.value >= 0;
+                      const maxAbsVal = Math.max(
+                        ...layers.map((l) => Math.abs(l.value))
+                      );
+                      const barWidth =
+                        maxAbsVal > 0
+                          ? Math.min(
+                              100,
+                              (Math.abs(layer.value) / maxAbsVal) * 100
+                            )
+                          : 0;
+
+                      return (
+                        <div key={layer.label}>
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-slate-300">
+                                {layer.label}
+                              </p>
+                              <p className="text-[10px] text-slate-500 truncate">
+                                {layer.description}
+                              </p>
+                            </div>
+                            <div className="text-right ml-4 shrink-0">
+                              <span
+                                className={`text-sm font-mono font-semibold ${
+                                  isPositive
+                                    ? "text-emerald-400"
+                                    : "text-rose-400"
+                                }`}
+                              >
+                                {isPositive ? "+" : "-"}$
+                                {Math.abs(layer.value).toLocaleString(
+                                  undefined,
+                                  { maximumFractionDigits: 0 }
+                                )}
+                              </span>
+                              <span className="text-[10px] text-slate-500 ml-1.5">
+                                {isPositive ? "+" : ""}
+                                {(pct * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+                          {/* Visual bar */}
+                          <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                isPositive ? "bg-emerald-500/60" : "bg-rose-500/60"
+                              }`}
+                              style={{ width: `${barWidth}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Net total divider */}
+                  <div className="border-t border-slate-700 mt-4 pt-3 flex items-center justify-between">
+                    <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                      Net Return (Median)
+                    </p>
+                    <div className="text-right">
+                      <span
+                        className={`text-base font-mono font-bold ${
+                          netReturn >= 0 ? "text-emerald-400" : "text-rose-400"
+                        }`}
+                      >
+                        {netReturn >= 0 ? "+" : "-"}$
+                        {Math.abs(netReturn).toLocaleString(undefined, {
+                          maximumFractionDigits: 0,
+                        })}
+                      </span>
+                      <span className="text-xs text-slate-500 ml-2">
+                        {s.medianReturn >= 0 ? "+" : ""}
+                        {(s.medianReturn * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Chart 1: Strategy Returns Over Time */}
