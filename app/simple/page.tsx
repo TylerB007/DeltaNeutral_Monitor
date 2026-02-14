@@ -1305,9 +1305,18 @@ export default function SimpleSimulatorPage() {
                   </div>
                   {/* Net total divider */}
                   <div className="border-t border-slate-700 mt-4 pt-3 flex items-center justify-between">
-                    <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
-                      Net Return
-                    </p>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                        Net Return
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        {(() => {
+                          const days = params.durationDays;
+                          const apr = (mp.finalReturn / days) * 365;
+                          return `${apr >= 0 ? "+" : ""}${(apr * 100).toFixed(1)}% APR (annualized)`;
+                        })()}
+                      </p>
+                    </div>
                     <div className="text-right">
                       <span
                         className={`text-base font-mono font-bold ${
