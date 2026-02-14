@@ -7,6 +7,7 @@ import {
   initialHedgeRatio,
 } from "@/lib/simulation";
 import type { SimulationParams, SimulationResult, TimeStep } from "@/lib/types";
+import Link from "next/link";
 import {
   LineChart,
   Line,
@@ -330,6 +331,14 @@ export default function SimulatorPage() {
             simulated market scenarios. See how delta-neutral hedging stabilizes
             returns by offsetting directional risk with short perpetual futures.
           </p>
+          <div className="mt-2">
+            <Link
+              href="/simple"
+              className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              New to this? Try the Quick Simulator &rarr;
+            </Link>
+          </div>
         </div>
       </header>
 
