@@ -692,16 +692,18 @@ export default function SimpleSimulatorPage() {
               </p>
             </div>
 
-            {/* P&L Breakdown — all 5 layers */}
+            {/* P&L Breakdown — median path */}
             {(() => {
-              const s = result.stats;
               const medianPath = result.paths[result.medianPathIndex];
-              const endingPrice =
-                medianPath.steps[medianPath.steps.length - 1].price;
+              const lastStep = medianPath.steps[medianPath.steps.length - 1];
+              const endingPrice = lastStep.price;
               const priceChange = endingPrice - ethPrice;
               const priceChangePct = priceChange / ethPrice;
-              const lpChange = s.meanIL; // IL is already LP value change vs HODL
-              const netReturn = s.medianReturn * investment;
+              const endedInRange = lastStep.inRange;
+
+              // Use median path values so everything is consistent
+              const mp = medianPath;
+              const netReturn = mp.finalReturn * investment;
               const layers: {
                 label: string;
                 description: string;
@@ -711,68 +713,90 @@ export default function SimpleSimulatorPage() {
                 {
                   label: "LP Value Change (IL)",
                   description: "Change in LP position value vs initial deposit",
-                  value: lpChange,
+                  value: mp.totalIL,
                 },
                 {
                   label: "LP Fee Income",
                   description: "Swap fees earned while price stayed in range",
-                  value: s.meanFees,
+                  value: mp.totalFees,
                 },
                 {
                   label: "Short Hedge P&L",
                   description: `P&L from the ${hedgeRatio}% short perp position`,
-                  value: s.meanHedgePnL,
+                  value: mp.totalHedgePnL,
                 },
                 {
                   label: "Funding Income",
                   description: "Payments received (or paid) on the perp position",
-                  value: s.meanFunding,
+                  value: mp.totalFundingPnL,
                 },
                 {
                   label: "Rebalance Costs",
-                  description: `Trading costs from ~${Math.round(s.avgRebalances)} hedge adjustments`,
-                  value: -s.meanRebalanceCosts,
+                  description: `Trading costs from ${mp.numRebalances} hedge adjustments`,
+                  value: -mp.totalRebalanceCosts,
                   isSubtraction: true,
                 },
               ];
+
+              // LP range bounds from params
+              const lpLower = params.lowerPrice;
+              const lpUpper = params.upperPrice;
 
               return (
                 <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5">
                   <div className="flex items-start justify-between mb-4">
                     <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">
-                      P&L Breakdown (Average across {result.paths.length} scenarios)
+                      P&L Breakdown (Median Scenario)
                     </h3>
                   </div>
 
                   {/* Scenario price context */}
-                  <div className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-4 py-3 mb-4 flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-4">
-                      <div>
-                        <p className="text-[10px] text-slate-500 uppercase">Entry Price</p>
-                        <p className="text-sm font-mono font-semibold text-slate-200">
-                          ${ethPrice.toLocaleString()}
-                        </p>
+                  <div className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-4 py-3 mb-4 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <p className="text-[10px] text-slate-500 uppercase">Entry Price</p>
+                          <p className="text-sm font-mono font-semibold text-slate-200">
+                            ${ethPrice.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="text-slate-600 text-lg">&rarr;</div>
+                        <div>
+                          <p className="text-[10px] text-slate-500 uppercase">Ending Price</p>
+                          <p className="text-sm font-mono font-semibold text-slate-200">
+                            ${Math.round(endingPrice).toLocaleString()}
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-slate-600 text-lg">&rarr;</div>
-                      <div>
-                        <p className="text-[10px] text-slate-500 uppercase">Median Ending Price</p>
-                        <p className="text-sm font-mono font-semibold text-slate-200">
-                          ${Math.round(endingPrice).toLocaleString()}
-                        </p>
+                      <div className="text-right">
+                        <span
+                          className={`text-sm font-mono font-semibold ${
+                            priceChange >= 0 ? "text-emerald-400" : "text-rose-400"
+                          }`}
+                        >
+                          {priceChange >= 0 ? "+" : "-"}$
+                          {Math.abs(Math.round(priceChange)).toLocaleString()}
+                        </span>
+                        <span className="text-[10px] text-slate-500 ml-1.5">
+                          ({priceChangePct >= 0 ? "+" : ""}
+                          {(priceChangePct * 100).toFixed(1)}%)
+                        </span>
                       </div>
                     </div>
-                    <div className="text-right">
+                    {/* LP Range indicator */}
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <span className="text-slate-500 uppercase">LP Range:</span>
+                      <span className="font-mono text-slate-400">
+                        ${Math.round(lpLower).toLocaleString()} – ${Math.round(lpUpper).toLocaleString()}
+                      </span>
                       <span
-                        className={`text-sm font-mono font-semibold ${
-                          priceChange >= 0 ? "text-emerald-400" : "text-rose-400"
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase ${
+                          endedInRange
+                            ? "bg-emerald-600/20 text-emerald-400"
+                            : "bg-rose-600/20 text-rose-400"
                         }`}
                       >
-                        {priceChange >= 0 ? "+" : "-"}$
-                        {Math.abs(Math.round(priceChange)).toLocaleString()}
-                      </span>
-                      <span className="text-[10px] text-slate-500 ml-1.5">
-                        ({priceChangePct >= 0 ? "+" : ""}
-                        {(priceChangePct * 100).toFixed(1)}%)
+                        {endedInRange ? "In Range" : "Out of Range"}
                       </span>
                     </div>
                   </div>
@@ -838,7 +862,7 @@ export default function SimpleSimulatorPage() {
                   {/* Net total divider */}
                   <div className="border-t border-slate-700 mt-4 pt-3 flex items-center justify-between">
                     <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
-                      Net Return (Median)
+                      Net Return
                     </p>
                     <div className="text-right">
                       <span
@@ -852,8 +876,8 @@ export default function SimpleSimulatorPage() {
                         })}
                       </span>
                       <span className="text-xs text-slate-500 ml-2">
-                        {s.medianReturn >= 0 ? "+" : ""}
-                        {(s.medianReturn * 100).toFixed(1)}%
+                        {mp.finalReturn >= 0 ? "+" : ""}
+                        {(mp.finalReturn * 100).toFixed(1)}%
                       </span>
                     </div>
                   </div>
