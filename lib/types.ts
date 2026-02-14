@@ -10,6 +10,7 @@ export interface SimulationParams {
   durationDays: number;
   numPaths: number;
   rebalanceThreshold: number; // as decimal (0.02 = 2%)
+  targetEndPrice?: number; // if set, run a single deterministic path ending at this price
 }
 
 export interface TimeStep {

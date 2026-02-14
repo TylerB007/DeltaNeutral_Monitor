@@ -350,6 +350,8 @@ export default function SimpleSimulatorPage() {
   const [customUpper, setCustomUpper] = useState(2300);
   const [marketPreset, setMarketPreset] = useState<MarketPreset>("normal");
   const [durationPreset, setDurationPreset] = useState<DurationPreset>("1m");
+  const [priceMode, setPriceMode] = useState<"simulated" | "fixed">("simulated");
+  const [fixedEndPrice, setFixedEndPrice] = useState(ethPrice);
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
@@ -379,10 +381,11 @@ export default function SimpleSimulatorPage() {
       fundingRate: market.fundingRate,
       hedgeRatio: hedgeRatio / 100, // convert from percentage
       durationDays: duration.days,
-      numPaths: FIXED_PARAMS.numPaths,
+      numPaths: priceMode === "fixed" ? 1 : FIXED_PARAMS.numPaths,
       rebalanceThreshold: FIXED_PARAMS.rebalanceThreshold,
+      ...(priceMode === "fixed" ? { targetEndPrice: fixedEndPrice } : {}),
     };
-  }, [investment, ethPrice, feeAPR, hedgeRatio, rangePreset, customLower, customUpper, marketPreset, durationPreset]);
+  }, [investment, ethPrice, feeAPR, hedgeRatio, rangePreset, customLower, customUpper, marketPreset, durationPreset, priceMode, fixedEndPrice]);
 
   const handleRun = useCallback(() => {
     setIsRunning(true);
@@ -588,6 +591,65 @@ export default function SimpleSimulatorPage() {
             columns="grid-cols-3"
           />
 
+          {/* Row 6: Price Scenario */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+              Ending Price
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setPriceMode("simulated")}
+                className={`px-3 py-2.5 rounded-lg text-sm border transition-all text-left ${
+                  priceMode === "simulated"
+                    ? "bg-blue-600/20 border-blue-500 text-blue-300"
+                    : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
+                }`}
+              >
+                <p className="font-medium text-xs">Simulated</p>
+                <p className="text-[10px] opacity-60 mt-0.5">200 random price paths</p>
+              </button>
+              <button
+                onClick={() => setPriceMode("fixed")}
+                className={`px-3 py-2.5 rounded-lg text-sm border transition-all text-left ${
+                  priceMode === "fixed"
+                    ? "bg-blue-600/20 border-blue-500 text-blue-300"
+                    : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
+                }`}
+              >
+                <p className="font-medium text-xs">Fixed Price</p>
+                <p className="text-[10px] opacity-60 mt-0.5">
+                  &quot;What if ETH ends at $X?&quot;
+                </p>
+              </button>
+            </div>
+            {priceMode === "fixed" && (
+              <div className="mt-2">
+                <NumberInput
+                  label="ETH Ending Price"
+                  value={fixedEndPrice}
+                  onChange={setFixedEndPrice}
+                  prefix="$"
+                  min={1}
+                  step={10}
+                  hint={(() => {
+                    const change = ((fixedEndPrice - ethPrice) / ethPrice) * 100;
+                    return `${change >= 0 ? "+" : ""}${change.toFixed(0)}% from entry ($${ethPrice.toLocaleString()})`;
+                  })()}
+                />
+              </div>
+            )}
+            {priceMode === "simulated" && (
+              <p className="text-[10px] text-slate-500 leading-relaxed px-0.5">
+                Runs 200 random price scenarios to show expected outcomes and risk distribution.
+              </p>
+            )}
+            {priceMode === "fixed" && (
+              <p className="text-[10px] text-slate-500 leading-relaxed px-0.5">
+                Shows exactly what happens to your position if ETH ends at this price — useful for stress-testing specific scenarios.
+              </p>
+            )}
+          </div>
+
           {/* Run button */}
           <button
             onClick={handleRun}
@@ -672,37 +734,77 @@ export default function SimpleSimulatorPage() {
         {result && (
           <>
             {/* Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <MetricCard
-                label="Expected Return"
-                value={`${result.stats.medianReturn >= 0 ? "+" : ""}${fmtPct(result.stats.medianReturn)}`}
-                sub={`${result.stats.medianReturn >= 0 ? "+" : "-"}${fmtDollars(Math.abs(result.stats.medianReturn * investment))} on ${fmtDollars(investment)}`}
-                color={result.stats.medianReturn >= 0 ? "green" : "red"}
-              />
-              <MetricCard
-                label="Win Rate"
-                value={fmtPct(result.stats.winRate, 0)}
-                sub={`${result.paths.filter((p) => p.finalReturn > 0).length} of ${result.paths.length} scenarios profitable`}
-                color={result.stats.winRate >= 0.5 ? "green" : "amber"}
-              />
-              <MetricCard
-                label="Fee Income"
-                value={fmtDollars(result.stats.meanFees)}
-                sub={`${fmtPct(result.stats.meanFees / investment)} of capital`}
-                color="green"
-              />
-              <MetricCard
-                label="Risk Level"
-                value={riskLabel(result.stats.avgMaxDrawdown)}
-                sub={`Max drawdown: ${fmtPct(result.stats.avgMaxDrawdown)}`}
-                color={riskColor(result.stats.avgMaxDrawdown)}
-              />
-            </div>
+            {priceMode === "simulated" ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <MetricCard
+                  label="Expected Return"
+                  value={`${result.stats.medianReturn >= 0 ? "+" : ""}${fmtPct(result.stats.medianReturn)}`}
+                  sub={`${result.stats.medianReturn >= 0 ? "+" : "-"}${fmtDollars(Math.abs(result.stats.medianReturn * investment))} on ${fmtDollars(investment)}`}
+                  color={result.stats.medianReturn >= 0 ? "green" : "red"}
+                />
+                <MetricCard
+                  label="Win Rate"
+                  value={fmtPct(result.stats.winRate, 0)}
+                  sub={`${result.paths.filter((p) => p.finalReturn > 0).length} of ${result.paths.length} scenarios profitable`}
+                  color={result.stats.winRate >= 0.5 ? "green" : "amber"}
+                />
+                <MetricCard
+                  label="Fee Income"
+                  value={fmtDollars(result.stats.meanFees)}
+                  sub={`${fmtPct(result.stats.meanFees / investment)} of capital`}
+                  color="green"
+                />
+                <MetricCard
+                  label="Risk Level"
+                  value={riskLabel(result.stats.avgMaxDrawdown)}
+                  sub={`Max drawdown: ${fmtPct(result.stats.avgMaxDrawdown)}`}
+                  color={riskColor(result.stats.avgMaxDrawdown)}
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <MetricCard
+                  label="Net Return"
+                  value={`${result.paths[0].finalReturn >= 0 ? "+" : ""}${fmtPct(result.paths[0].finalReturn)}`}
+                  sub={`${result.paths[0].finalReturn >= 0 ? "+" : "-"}${fmtDollars(Math.abs(result.paths[0].finalReturn * investment))} on ${fmtDollars(investment)}`}
+                  color={result.paths[0].finalReturn >= 0 ? "green" : "red"}
+                />
+                <MetricCard
+                  label="Fee Income"
+                  value={fmtDollars(result.paths[0].totalFees)}
+                  sub={`${fmtPct(result.paths[0].totalFees / investment)} of capital`}
+                  color="green"
+                />
+                <MetricCard
+                  label="Hedge P&L"
+                  value={`${result.paths[0].totalHedgePnL >= 0 ? "+" : "-"}${fmtDollars(Math.abs(result.paths[0].totalHedgePnL))}`}
+                  sub="Short position gain/loss"
+                  color={result.paths[0].totalHedgePnL >= 0 ? "green" : "red"}
+                />
+              </div>
+            )}
 
             {/* Beginner explanation */}
             <div className="bg-slate-900/40 border border-slate-800/50 rounded-lg px-5 py-4">
               <p className="text-sm text-slate-300 leading-relaxed">
-                {getResultExplanation(result, investment)}
+                {priceMode === "simulated"
+                  ? getResultExplanation(result, investment)
+                  : (() => {
+                      const p = result.paths[0];
+                      const endPrice = p.steps[p.steps.length - 1].price;
+                      const changePct = ((endPrice - ethPrice) / ethPrice * 100).toFixed(1);
+                      const dir = endPrice >= ethPrice ? "rises" : "drops";
+                      return (
+                        `If ETH ${dir} from $${ethPrice.toLocaleString()} to $${Math.round(endPrice).toLocaleString()} ` +
+                        `(${endPrice >= ethPrice ? "+" : ""}${changePct}%) over ${DURATION_PRESETS[durationPreset].days} days, ` +
+                        `your $${investment.toLocaleString()} position would ${p.finalReturn >= 0 ? "earn" : "lose"} ` +
+                        `$${Math.abs(Math.round(p.finalReturn * investment)).toLocaleString()} ` +
+                        `(${p.finalReturn >= 0 ? "+" : ""}${(p.finalReturn * 100).toFixed(1)}%). ` +
+                        `Fee income of $${Math.round(p.totalFees).toLocaleString()} ` +
+                        `${p.totalHedgePnL >= 0 ? "plus" : "minus"} $${Math.abs(Math.round(p.totalHedgePnL)).toLocaleString()} from the hedge.`
+                      );
+                    })()
+                }
               </p>
             </div>
 
@@ -760,7 +862,7 @@ export default function SimpleSimulatorPage() {
                 <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5">
                   <div className="flex items-start justify-between mb-4">
                     <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">
-                      P&L Breakdown (Median Scenario)
+                      P&L Breakdown {priceMode === "fixed" ? "(Fixed Price Scenario)" : "(Median Scenario)"}
                     </h3>
                   </div>
 
@@ -900,9 +1002,9 @@ export default function SimpleSimulatorPage() {
             })()}
 
             {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className={`grid gap-5 ${priceMode === "fixed" ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2"}`}>
               {/* Chart 1: Strategy Returns Over Time */}
-              <ChartCard title="Strategy Returns Over Time (Median Path)">
+              <ChartCard title={priceMode === "fixed" ? "Strategy Returns Over Time" : "Strategy Returns Over Time (Median Path)"}>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={returnsData}>
                     <CartesianGrid
@@ -958,66 +1060,68 @@ export default function SimpleSimulatorPage() {
                 </ResponsiveContainer>
               </ChartCard>
 
-              {/* Chart 2: Return Distribution */}
-              <ChartCard title="Return Distribution (Hedged vs Unhedged)">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={result.returnDistribution}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#334155"
-                      strokeOpacity={0.3}
-                    />
-                    <XAxis
-                      dataKey="bin"
-                      stroke="#64748b"
-                      fontSize={9}
-                      tickLine={false}
-                      interval={Math.max(
-                        0,
-                        Math.floor(result.returnDistribution.length / 10) - 1
-                      )}
-                    />
-                    <YAxis
-                      stroke="#64748b"
-                      fontSize={10}
-                      tickLine={false}
-                      label={{
-                        value: "# Scenarios",
-                        angle: -90,
-                        position: "insideLeft",
-                        fill: "#64748b",
-                        fontSize: 10,
-                        offset: 10,
-                      }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "#1e293b",
-                        border: "1px solid #334155",
-                        borderRadius: 8,
-                        fontSize: 12,
-                      }}
-                    />
-                    <Legend
-                      wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-                    />
-                    <Bar
-                      dataKey="hedged"
-                      fill="#34d399"
-                      fillOpacity={0.8}
-                      name="Hedged"
-                      radius={[2, 2, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="unhedged"
-                      fill="#fbbf24"
-                      fillOpacity={0.5}
-                      name="Unhedged"
-                      radius={[2, 2, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
+              {/* Chart 2: Return Distribution (only in simulated mode) */}
+              {priceMode === "simulated" && (
+                <ChartCard title="Return Distribution (Hedged vs Unhedged)">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={result.returnDistribution}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="#334155"
+                        strokeOpacity={0.3}
+                      />
+                      <XAxis
+                        dataKey="bin"
+                        stroke="#64748b"
+                        fontSize={9}
+                        tickLine={false}
+                        interval={Math.max(
+                          0,
+                          Math.floor(result.returnDistribution.length / 10) - 1
+                        )}
+                      />
+                      <YAxis
+                        stroke="#64748b"
+                        fontSize={10}
+                        tickLine={false}
+                        label={{
+                          value: "# Scenarios",
+                          angle: -90,
+                          position: "insideLeft",
+                          fill: "#64748b",
+                          fontSize: 10,
+                          offset: 10,
+                        }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "#1e293b",
+                          border: "1px solid #334155",
+                          borderRadius: 8,
+                          fontSize: 12,
+                        }}
+                      />
+                      <Legend
+                        wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                      />
+                      <Bar
+                        dataKey="hedged"
+                        fill="#34d399"
+                        fillOpacity={0.8}
+                        name="Hedged"
+                        radius={[2, 2, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="unhedged"
+                        fill="#fbbf24"
+                        fillOpacity={0.5}
+                        name="Unhedged"
+                        radius={[2, 2, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+              )}
             </div>
 
             {/* CTA to advanced */}

@@ -142,14 +142,29 @@ function simulateSinglePath(params: SimulationParams): PathResult {
   const dt = 1 / 365;
   let price = entryPrice;
 
+  // When targetEndPrice is set, use a deterministic log-linear path with
+  // small daily noise so rebalancing triggers realistically.
+  const isFixedPrice = params.targetEndPrice != null;
+  const logStart = Math.log(entryPrice);
+  const logEnd = isFixedPrice ? Math.log(params.targetEndPrice!) : 0;
+  const dailyLogStep = isFixedPrice ? (logEnd - logStart) / durationDays : 0;
+
   for (let day = 1; day <= durationDays; day++) {
-    // GBM price evolution (zero drift for risk-neutral simulation)
-    const z = normalRandom();
-    price =
-      price *
-      Math.exp(
-        (-volatility * volatility / 2) * dt + volatility * Math.sqrt(dt) * z
-      );
+    if (isFixedPrice) {
+      // Deterministic path: linear in log-space with micro-noise for rebalance realism
+      const noise = normalRandom() * 0.002; // tiny jitter
+      price = Math.exp(logStart + dailyLogStep * day + noise);
+      // On final day, snap exactly to target
+      if (day === durationDays) price = params.targetEndPrice!;
+    } else {
+      // GBM price evolution (zero drift for risk-neutral simulation)
+      const z = normalRandom();
+      price =
+        price *
+        Math.exp(
+          (-volatility * volatility / 2) * dt + volatility * Math.sqrt(dt) * z
+        );
+    }
 
     // Ensure price stays positive and reasonable
     price = Math.max(price, 1);
