@@ -20,12 +20,13 @@ import {
 
 // ─── Preset types & constants ───────────────────────────────────────────────
 
-type RangePreset = "narrow" | "medium" | "wide";
+type RangePresetKey = "narrow" | "medium" | "wide";
+type RangePreset = RangePresetKey | "custom";
 type MarketPreset = "calm" | "normal" | "volatile" | "bear";
 type DurationPreset = "1w" | "1m" | "3m";
 
 const RANGE_PRESETS: Record<
-  RangePreset,
+  RangePresetKey,
   { label: string; description: string; factor: number }
 > = {
   narrow: {
@@ -336,6 +337,8 @@ export default function SimpleSimulatorPage() {
   const [feeAPR, setFeeAPR] = useState(25); // percentage (user-facing)
   const [hedgeRatio, setHedgeRatio] = useState(100); // percentage (user-facing)
   const [rangePreset, setRangePreset] = useState<RangePreset>("medium");
+  const [customLower, setCustomLower] = useState(1700);
+  const [customUpper, setCustomUpper] = useState(2300);
   const [marketPreset, setMarketPreset] = useState<MarketPreset>("normal");
   const [durationPreset, setDurationPreset] = useState<DurationPreset>("1m");
   const [result, setResult] = useState<SimulationResult | null>(null);
@@ -343,14 +346,25 @@ export default function SimpleSimulatorPage() {
 
   // Derive full SimulationParams from inputs + presets
   const params = useMemo((): SimulationParams => {
-    const range = RANGE_PRESETS[rangePreset];
     const market = MARKET_PRESETS[marketPreset];
     const duration = DURATION_PRESETS[durationPreset];
+
+    let lowerPrice: number;
+    let upperPrice: number;
+    if (rangePreset === "custom") {
+      lowerPrice = customLower;
+      upperPrice = customUpper;
+    } else {
+      const range = RANGE_PRESETS[rangePreset];
+      lowerPrice = ethPrice * (1 - range.factor);
+      upperPrice = ethPrice * (1 + range.factor);
+    }
+
     return {
       initialInvestment: investment,
       entryPrice: ethPrice,
-      lowerPrice: ethPrice * (1 - range.factor),
-      upperPrice: ethPrice * (1 + range.factor),
+      lowerPrice,
+      upperPrice,
       volatility: market.volatility,
       feeAPR: feeAPR / 100, // convert from percentage
       fundingRate: market.fundingRate,
@@ -359,7 +373,7 @@ export default function SimpleSimulatorPage() {
       numPaths: FIXED_PARAMS.numPaths,
       rebalanceThreshold: FIXED_PARAMS.rebalanceThreshold,
     };
-  }, [investment, ethPrice, feeAPR, hedgeRatio, rangePreset, marketPreset, durationPreset]);
+  }, [investment, ethPrice, feeAPR, hedgeRatio, rangePreset, customLower, customUpper, marketPreset, durationPreset]);
 
   const handleRun = useCallback(() => {
     setIsRunning(true);
@@ -478,17 +492,61 @@ export default function SimpleSimulatorPage() {
           </div>
 
           {/* Row 3: Range Width */}
-          <OptionSelector
-            label="Price Range Width"
-            options={Object.entries(RANGE_PRESETS).map(([key, val]) => ({
-              key: key as RangePreset,
-              label: val.label,
-              description: val.description,
-            }))}
-            value={rangePreset}
-            onChange={setRangePreset}
-            columns="grid-cols-3"
-          />
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+              Price Range Width
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {Object.entries(RANGE_PRESETS).map(([key, val]) => (
+                <button
+                  key={key}
+                  onClick={() => setRangePreset(key as RangePresetKey)}
+                  className={`px-3 py-2.5 rounded-lg text-sm border transition-all text-left ${
+                    rangePreset === key
+                      ? "bg-blue-600/20 border-blue-500 text-blue-300"
+                      : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
+                  }`}
+                >
+                  <p className="font-medium text-xs">{val.label}</p>
+                  <p className="text-[10px] opacity-60 mt-0.5">{val.description}</p>
+                </button>
+              ))}
+              <button
+                onClick={() => setRangePreset("custom")}
+                className={`px-3 py-2.5 rounded-lg text-sm border transition-all text-left ${
+                  rangePreset === "custom"
+                    ? "bg-blue-600/20 border-blue-500 text-blue-300"
+                    : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
+                }`}
+              >
+                <p className="font-medium text-xs">Custom</p>
+                <p className="text-[10px] opacity-60 mt-0.5">Set your own min/max</p>
+              </button>
+            </div>
+            {rangePreset === "custom" && (
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <NumberInput
+                  label="Min Price"
+                  value={customLower}
+                  onChange={setCustomLower}
+                  prefix="$"
+                  min={1}
+                  max={ethPrice - 1}
+                  step={10}
+                  hint={`${(((ethPrice - customLower) / ethPrice) * 100).toFixed(0)}% below entry`}
+                />
+                <NumberInput
+                  label="Max Price"
+                  value={customUpper}
+                  onChange={setCustomUpper}
+                  prefix="$"
+                  min={ethPrice + 1}
+                  step={10}
+                  hint={`${(((customUpper - ethPrice) / ethPrice) * 100).toFixed(0)}% above entry`}
+                />
+              </div>
+            )}
+          </div>
 
           {/* Row 4: Market Conditions */}
           <OptionSelector
