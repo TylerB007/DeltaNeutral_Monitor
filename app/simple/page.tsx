@@ -291,6 +291,322 @@ function ChartTooltip({ active, payload, label, suffix }: any) {
   );
 }
 
+// ─── P&L Detail Content ──────────────────────────────────────────────────────
+
+const PNL_DETAILS: Record<
+  string,
+  { title: string; sections: { heading: string; body: string }[] }
+> = {
+  "LP Value Change (IL)": {
+    title: "Impermanent Loss (IL)",
+    sections: [
+      {
+        heading: "What is it?",
+        body: "Impermanent Loss is the difference between holding your tokens in a liquidity pool vs. simply holding them in your wallet. When the price moves away from your entry, the pool automatically rebalances your token mix — selling the token that's gaining and buying the one that's losing — so you end up with less value than a pure holder.",
+      },
+      {
+        heading: "When does it hurt?",
+        body: "IL gets worse the further the price moves from your entry. A concentrated (narrow) range amplifies IL because smaller moves cause larger rebalances. If the price goes completely out of range, IL maxes out — your position becomes 100% of the losing token.",
+      },
+      {
+        heading: "How to manage it",
+        body: "Use a wider price range to reduce IL sensitivity. The short hedge is specifically designed to offset IL by profiting from the same price move that causes the loss. A 100% hedge ratio aims to fully neutralize IL.",
+      },
+    ],
+  },
+  "LP Fee Income": {
+    title: "LP Fee Income",
+    sections: [
+      {
+        heading: "What is it?",
+        body: "Every time someone swaps tokens through the Uniswap pool, they pay a fee (e.g., 0.3% or 0.05%). As a liquidity provider, you earn a proportional share of these fees based on how much liquidity you've contributed within the active price range.",
+      },
+      {
+        heading: "When do you earn more?",
+        body: "Fee income is higher when: (1) trading volume is high, (2) your range is narrow (more concentrated = bigger share of fees), and (3) the price stays within your range. If the price goes out of range, you earn zero fees until it returns.",
+      },
+      {
+        heading: "Key tradeoff",
+        body: "Narrower ranges earn more fees per dollar deployed, but have higher IL risk and go out of range more easily. The Fee APR you set in the inputs approximates the annualized yield you'd earn if the price stayed in range all the time.",
+      },
+    ],
+  },
+  "Short Hedge P&L": {
+    title: "Short Hedge P&L",
+    sections: [
+      {
+        heading: "What is it?",
+        body: "This is the profit or loss from your short perpetual futures position. When you short ETH perps, you profit when ETH's price drops and lose when it rises. This is designed to offset the Impermanent Loss from your LP position.",
+      },
+      {
+        heading: "How the hedge works",
+        body: "The LP position has positive delta (it gains value when ETH goes up, but less than a pure holder). The short hedge has negative delta. Combined, they create a 'delta-neutral' position where price movements in either direction are offset. The hedge size is calibrated to match the LP's delta exposure.",
+      },
+      {
+        heading: "Why it might not perfectly offset IL",
+        body: "LP delta changes as the price moves (it's not constant). The hedge is rebalanced periodically, but between rebalances there's a small mismatch. This 'gamma' effect means the hedge can slightly over- or under-compensate, especially during large price swings.",
+      },
+    ],
+  },
+  "Funding Income": {
+    title: "Funding Income",
+    sections: [
+      {
+        heading: "What is it?",
+        body: "Perpetual futures use a 'funding rate' mechanism to keep their price anchored to the spot price. When funding is positive (most of the time in bull markets), shorts receive payments from longs. When negative (bear markets), shorts pay longs.",
+      },
+      {
+        heading: "Why it matters",
+        body: "Positive funding is a significant source of income for the delta-neutral strategy. It's essentially being paid to hold the hedge. In the 'Calm' and 'Normal' market presets, funding contributes meaningfully to total returns. In 'Bear Market' mode, negative funding eats into returns.",
+      },
+      {
+        heading: "How it's calculated",
+        body: "Daily funding = hedge size (in ETH) x ETH price x (annual funding rate / 365). The funding rate you see in the market preset reflects annualized rates. Actual rates on exchanges fluctuate — the sim uses a constant average.",
+      },
+    ],
+  },
+  "Rebalance Costs": {
+    title: "Rebalance Costs",
+    sections: [
+      {
+        heading: "What is it?",
+        body: "As the ETH price moves, your LP's delta (price sensitivity) changes. The hedge needs to be adjusted to stay matched. Each adjustment incurs a trading cost — typically around 10 basis points (0.1%) of the trade size on the perpetual exchange.",
+      },
+      {
+        heading: "When are costs higher?",
+        body: "More volatile markets trigger more frequent rebalances. Narrow LP ranges cause delta to change faster, also increasing rebalance frequency. The simulation rebalances when the net delta mismatch exceeds 2% of the initial delta.",
+      },
+      {
+        heading: "Impact on returns",
+        body: "Rebalance costs are usually the smallest drag on returns. In calm markets with wide ranges, you might only rebalance a handful of times over 30 days. In volatile markets with narrow ranges, costs can add up but are typically dwarfed by fee income and funding.",
+      },
+    ],
+  },
+};
+
+function PnlDetailModal({
+  layerLabel,
+  onClose,
+}: {
+  layerLabel: string;
+  onClose: () => void;
+}) {
+  const detail = PNL_DETAILS[layerLabel];
+  if (!detail) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+          <h3 className="text-base font-bold text-slate-100">{detail.title}</h3>
+          <button
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-300 transition-colors p-1"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-5">
+          {detail.sections.map((sec, i) => (
+            <div key={i}>
+              <h4 className="text-sm font-semibold text-slate-300 mb-1.5">{sec.heading}</h4>
+              <p className="text-sm text-slate-400 leading-relaxed">{sec.body}</p>
+            </div>
+          ))}
+        </div>
+        <div className="px-6 py-4 border-t border-slate-800">
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Scenario Table Modal ────────────────────────────────────────────────────
+
+type SortColumn = "scenario" | "endPrice" | "priceChange" | "fees" | "il" | "hedgePnl" | "funding" | "rebalanceCost" | "netReturn";
+type SortDir = "asc" | "desc";
+
+function ScenarioTableModal({
+  result,
+  investment,
+  entryPrice,
+  onClose,
+}: {
+  result: SimulationResult;
+  investment: number;
+  entryPrice: number;
+  onClose: () => void;
+}) {
+  const [sortCol, setSortCol] = useState<SortColumn>("scenario");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const handleSort = (col: SortColumn) => {
+    if (sortCol === col) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir(col === "scenario" ? "asc" : "desc");
+    }
+  };
+
+  const rows = useMemo(() => {
+    const data = result.paths.map((p, i) => {
+      const endPrice = p.steps[p.steps.length - 1].price;
+      return {
+        scenario: i + 1,
+        endPrice,
+        priceChange: (endPrice - entryPrice) / entryPrice,
+        fees: p.totalFees,
+        il: p.totalIL,
+        hedgePnl: p.totalHedgePnL,
+        funding: p.totalFundingPnL,
+        rebalanceCost: p.totalRebalanceCosts,
+        netReturn: p.finalReturn,
+      };
+    });
+
+    data.sort((a, b) => {
+      const aVal = a[sortCol];
+      const bVal = b[sortCol];
+      return sortDir === "asc" ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+    });
+
+    return data;
+  }, [result, entryPrice, sortCol, sortDir]);
+
+  const SortHeader = ({ col, label, className }: { col: SortColumn; label: string; className?: string }) => (
+    <th
+      className={`px-3 py-2.5 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-200 transition-colors select-none whitespace-nowrap ${className || ""}`}
+      onClick={() => handleSort(col)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {sortCol === col && (
+          <span className="text-blue-400">{sortDir === "asc" ? "\u25B2" : "\u25BC"}</span>
+        )}
+      </span>
+    </th>
+  );
+
+  const fmtCell = (val: number, isDollar = true) => {
+    const prefix = val >= 0 ? "+" : "-";
+    const abs = Math.abs(val);
+    return (
+      <span className={val >= 0 ? "text-emerald-400" : "text-rose-400"}>
+        {prefix}{isDollar ? "$" : ""}{isDollar ? abs.toLocaleString(undefined, { maximumFractionDigits: 0 }) : (abs * 100).toFixed(1) + "%"}
+      </span>
+    );
+  };
+
+  // Summary stats
+  const profitable = rows.filter(r => r.netReturn > 0).length;
+  const avgReturn = rows.reduce((s, r) => s + r.netReturn, 0) / rows.length;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative bg-slate-900 border border-slate-700 rounded-2xl max-w-6xl w-full max-h-[85vh] flex flex-col shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="shrink-0 border-b border-slate-800 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+          <div>
+            <h3 className="text-base font-bold text-slate-100">All Simulated Scenarios</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {result.paths.length} Monte Carlo paths &middot; {profitable} profitable ({(profitable / result.paths.length * 100).toFixed(0)}%) &middot; Avg return: {avgReturn >= 0 ? "+" : ""}{(avgReturn * 100).toFixed(1)}%
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-300 transition-colors p-1"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-auto flex-1">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-slate-900/95 backdrop-blur-sm border-b border-slate-800">
+              <tr>
+                <SortHeader col="scenario" label="#" className="w-12" />
+                <SortHeader col="endPrice" label="End Price" />
+                <SortHeader col="priceChange" label="Price Chg" />
+                <SortHeader col="fees" label="Fees" />
+                <SortHeader col="il" label="IL" />
+                <SortHeader col="hedgePnl" label="Hedge P&L" />
+                <SortHeader col="funding" label="Funding" />
+                <SortHeader col="rebalanceCost" label="Rebal Cost" />
+                <SortHeader col="netReturn" label="Net Return" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/50">
+              {rows.map((row) => (
+                <tr
+                  key={row.scenario}
+                  className="hover:bg-slate-800/40 transition-colors"
+                >
+                  <td className="px-3 py-2 font-mono text-slate-500">{row.scenario}</td>
+                  <td className="px-3 py-2 font-mono text-slate-300">
+                    ${Math.round(row.endPrice).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 font-mono">{fmtCell(row.priceChange, false)}</td>
+                  <td className="px-3 py-2 font-mono">{fmtCell(row.fees)}</td>
+                  <td className="px-3 py-2 font-mono">{fmtCell(row.il)}</td>
+                  <td className="px-3 py-2 font-mono">{fmtCell(row.hedgePnl)}</td>
+                  <td className="px-3 py-2 font-mono">{fmtCell(row.funding)}</td>
+                  <td className="px-3 py-2 font-mono">
+                    <span className="text-rose-400">
+                      -${Math.abs(row.rebalanceCost).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 font-mono font-semibold">
+                    {fmtCell(row.netReturn * investment)}
+                    <span className="text-slate-500 ml-1 font-normal">
+                      ({row.netReturn >= 0 ? "+" : ""}{(row.netReturn * 100).toFixed(1)}%)
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 px-6 py-3 border-t border-slate-800 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-5 py-2 rounded-lg text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Chart data builder ─────────────────────────────────────────────────────
 
 function buildReturnsChartData(result: SimulationResult) {
@@ -354,6 +670,8 @@ export default function SimpleSimulatorPage() {
   const [fixedEndPrice, setFixedEndPrice] = useState(ethPrice);
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [pnlDetailLayer, setPnlDetailLayer] = useState<string | null>(null);
+  const [showScenarioTable, setShowScenarioTable] = useState(false);
 
   // Derive full SimulationParams from inputs + presets
   const params = useMemo((): SimulationParams => {
@@ -930,13 +1248,23 @@ export default function SimpleSimulatorPage() {
                               (Math.abs(layer.value) / maxAbsVal) * 100
                             )
                           : 0;
+                      const hasDetail = layer.label in PNL_DETAILS;
 
                       return (
-                        <div key={layer.label}>
+                        <div
+                          key={layer.label}
+                          className={hasDetail ? "cursor-pointer rounded-lg px-2 py-1.5 -mx-2 hover:bg-slate-800/60 transition-colors group" : ""}
+                          onClick={hasDetail ? () => setPnlDetailLayer(layer.label) : undefined}
+                        >
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-slate-300">
+                              <p className="text-xs font-medium text-slate-300 inline-flex items-center gap-1.5">
                                 {layer.label}
+                                {hasDetail && (
+                                  <svg className="w-3 h-3 text-slate-600 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                )}
                               </p>
                               <p className="text-[10px] text-slate-500 truncate">
                                 {layer.description}
@@ -1124,6 +1452,21 @@ export default function SimpleSimulatorPage() {
               )}
             </div>
 
+            {/* View All Scenarios (simulated mode only) */}
+            {priceMode === "simulated" && (
+              <button
+                onClick={() => setShowScenarioTable(true)}
+                className="w-full px-4 py-3 rounded-lg text-sm font-medium transition-all
+                  bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-slate-300
+                  flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                View All {result.paths.length} Scenarios
+              </button>
+            )}
+
             {/* CTA to advanced */}
             <div className="bg-slate-900/40 border border-slate-800/50 rounded-lg px-5 py-4 flex items-center justify-between">
               <div>
@@ -1142,6 +1485,24 @@ export default function SimpleSimulatorPage() {
                 Advanced Mode
               </Link>
             </div>
+
+            {/* P&L Detail Modal */}
+            {pnlDetailLayer && (
+              <PnlDetailModal
+                layerLabel={pnlDetailLayer}
+                onClose={() => setPnlDetailLayer(null)}
+              />
+            )}
+
+            {/* Scenario Table Modal */}
+            {showScenarioTable && (
+              <ScenarioTableModal
+                result={result}
+                investment={investment}
+                entryPrice={ethPrice}
+                onClose={() => setShowScenarioTable(false)}
+              />
+            )}
           </>
         )}
       </div>
