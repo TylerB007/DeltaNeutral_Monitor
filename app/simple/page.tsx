@@ -613,6 +613,11 @@ export default function SimpleSimulatorPage() {
             {/* P&L Breakdown — all 5 layers */}
             {(() => {
               const s = result.stats;
+              const medianPath = result.paths[result.medianPathIndex];
+              const endingPrice =
+                medianPath.steps[medianPath.steps.length - 1].price;
+              const priceChange = endingPrice - ethPrice;
+              const priceChangePct = priceChange / ethPrice;
               const lpChange = s.meanIL; // IL is already LP value change vs HODL
               const netReturn = s.medianReturn * investment;
               const layers: {
@@ -651,9 +656,44 @@ export default function SimpleSimulatorPage() {
 
               return (
                 <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5">
-                  <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-4">
-                    P&L Breakdown (Average across {result.paths.length} scenarios)
-                  </h3>
+                  <div className="flex items-start justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">
+                      P&L Breakdown (Average across {result.paths.length} scenarios)
+                    </h3>
+                  </div>
+
+                  {/* Scenario price context */}
+                  <div className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-4 py-3 mb-4 flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <p className="text-[10px] text-slate-500 uppercase">Entry Price</p>
+                        <p className="text-sm font-mono font-semibold text-slate-200">
+                          ${ethPrice.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="text-slate-600 text-lg">&rarr;</div>
+                      <div>
+                        <p className="text-[10px] text-slate-500 uppercase">Median Ending Price</p>
+                        <p className="text-sm font-mono font-semibold text-slate-200">
+                          ${Math.round(endingPrice).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span
+                        className={`text-sm font-mono font-semibold ${
+                          priceChange >= 0 ? "text-emerald-400" : "text-rose-400"
+                        }`}
+                      >
+                        {priceChange >= 0 ? "+" : "-"}$
+                        {Math.abs(Math.round(priceChange)).toLocaleString()}
+                      </span>
+                      <span className="text-[10px] text-slate-500 ml-1.5">
+                        ({priceChangePct >= 0 ? "+" : ""}
+                        {(priceChangePct * 100).toFixed(1)}%)
+                      </span>
+                    </div>
+                  </div>
                   <div className="space-y-2.5">
                     {layers.map((layer) => {
                       const pct = layer.value / investment;
